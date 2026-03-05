@@ -22,10 +22,10 @@ knitr::opts_chunk$set(
 library(dplyr)
 library(tidyverse)
 
-squamates_df = read.delim("../SquamateGenomics/NCBI_available_genomes.summary.July2025.txt")
+squamates_df = read.delim("../data/NCBI_available_genomes.summary.July2025.txt")
 squamates_df$speciesname = str_replace(squamates_df$speciesname, " ", "_")
-sqm_df = read.delim("../SquamateGenomics/squamates_Title_Science2024_family_classification.txt")
-tree = read.tree("../SquamateGenomics/squamates_Title_Science2024_ultrametric_constrained.tre")
+sqm_df = read.delim("../data/squamates_Title_Science2024_family_classification.txt")
+tree = read.tree("../data/squamates_Title_Science2024_ultrametric_constrained.tre")
 sqm_df2 = merge(sqm_df, squamates_df, by.x = "label", by.y = "speciesname", all.x = TRUE) 
 ```
 
@@ -34,9 +34,9 @@ sqm_df2 = merge(sqm_df, squamates_df, by.x = "label", by.y = "speciesname", all.
 ## Mammalia
 
 ```{r mammals}
-mams = read.delim("../SquamateGenomics/Mammalia_Aves/MDD_v2.2_6815species.csv", sep = ",")
+mams = read.delim("../data/Mammalia_Aves_Amphibia/MDD_v2.2_6815species.csv", sep = ",")
 mams = mams[mams$extinct == 0,]
-mams_ncbi = read.delim("../SquamateGenomics/Mammalia_Aves/Mammalia_ncbi_dataset.tsv", sep = "\t")
+mams_ncbi = read.delim("../data/Mammalia_Aves_Amphibia/Mammalia_ncbi_dataset.tsv", sep = "\t")
 mams_ncbi$Organism.Name = paste0(sapply(str_split(mams_ncbi$Organism.Name, " "), .subset, 1), "_", sapply(str_split(mams_ncbi$Organism.Name, " "), .subset, 2))
 mams_ncbi = mams_ncbi[mams_ncbi$Assembly.Level %in% c("Complete Genome", "Chromosome"),]
 
@@ -62,9 +62,9 @@ species_with_genomes/species
 ## Aves
 
 ```{r aves}
-aves = readxl::read_xlsx("../SquamateGenomics/Mammalia_Aves/AviList-v2025-11Jun-extended.xlsx")
+aves = readxl::read_xlsx("../data/Mammalia_Aves_Amphibia/AviList-v2025-11Jun-extended.xlsx")
 aves = aves[aves$Taxon_rank == "species",]
-aves_ncbi = read.delim("../SquamateGenomics/Mammalia_Aves/Aves_ncbi_dataset.tsv", sep = "\t")
+aves_ncbi = read.delim("../data/Mammalia_Aves_Amphibia/Aves_ncbi_dataset.tsv", sep = "\t")
 aves_ncbi$Organism.Name = paste0(sapply(str_split(aves_ncbi$Organism.Name, " "), .subset, 1), " ", sapply(str_split(aves_ncbi$Organism.Name, " "), .subset, 2))
 aves_ncbi = aves_ncbi[aves_ncbi$Assembly.Level %in% c("Complete Genome", "Chromosome"),]
 
@@ -91,7 +91,7 @@ species_with_genomes/species
 
 ```{r amphs}
 library(xml2)
-xmldoc <- xml2::read_xml("../SquamateGenomics/Mammalia_Aves/amphib_dump.xml")
+xmldoc <- xml2::read_xml("../data/Mammalia_Aves_Amphibia/amphib_dump.xml")
 xlist <- xml2::as_list(xmldoc)
 result_df <- as_tibble(map_dfr(
     xlist[[1]],
@@ -103,7 +103,7 @@ result_df <- as_tibble(map_dfr(
 result_df[] <- lapply(result_df, function(x) gsub("\n", "", x))
 result_df$Scientific_name = paste0(result_df$genus, " ", result_df$specificepithet)
 
-amphs_ncbi = read.delim("../SquamateGenomics/Mammalia_Aves/Amphibia_ncbi_dataset.tsv", sep = "\t")
+amphs_ncbi = read.delim("../data/Mammalia_Aves_Amphibia/Amphibia_ncbi_dataset.tsv", sep = "\t")
 amphs_ncbi$Organism.Name = paste0(sapply(str_split(amphs_ncbi$Organism.Name, " "), .subset, 1), " ", sapply(str_split(amphs_ncbi$Organism.Name, " "), .subset, 2))
 amphs_ncbi = amphs_ncbi[amphs_ncbi$Assembly.Level %in% c("Complete Genome", "Chromosome"),]
 
@@ -176,7 +176,7 @@ p = ggplot(all, aes(x = Group)) +
     ) +
     theme_bw() + theme(axis.title.x = element_blank(), text = element_text(size = 15))
 
-pdf("../SquamateGenomics/Mammals_Aves_Amphibians_Squamates.pdf", height = 3.8, width = 10)
+pdf("Mammals_Aves_Amphibians_Squamates.pdf", height = 3.8, width = 10)
 p
 dev.off()
 
