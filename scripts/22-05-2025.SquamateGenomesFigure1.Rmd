@@ -40,10 +40,10 @@ library(tidytree)
 library(ezRun)
 library(ggh4x)
 
-squamates_df = read.delim("../SquamateGenomics/NCBI_available_genomes.summary.July2025.txt")
+squamates_df = read.delim("../data/NCBI_available_genomes.summary.July2025.txt")
 squamates_df$speciesname = str_replace(squamates_df$speciesname, " ", "_")
-sqm_df = read.delim("../SquamateGenomics/squamates_Title_Science2024_family_classification.txt")
-tree = read.tree("../SquamateGenomics/squamates_Title_Science2024_ultrametric_constrained.tre")
+sqm_df = read.delim("../data/squamates_Title_Science2024_family_classification.txt")
+tree = read.tree("../data/squamates_Title_Science2024_ultrametric_constrained.tre")
 
 #Names differ between NCBI and the tree - here I unify what I managed to find
 squamates_df[squamates_df$speciesname == "Bofa_erlangeri",]$speciesname = "Lamprophis_erlangeri"
@@ -184,7 +184,7 @@ p1 = p1 +
   geom_point2(aes(subset=(node == getMRCA(tree, sqm_df_subset[grepl("Podarcis", sqm_df_subset$label),]$node))), 
               shape=8, size=5, color='red')
 
-pdf("../SquamateGenomics/Full_Tree.pdf", height = 9, width = 13)
+pdf("Full_Tree.pdf", height = 9, width = 13)
 p1
 dev.off()
 ```
@@ -231,7 +231,7 @@ px = px +
 
 px$data$label = str_replace(px$data$label, "_", " ")
 
-pdf("../SquamateGenomics/Podarcis_tree.pdf", height = 10, width = 10)
+pdf("Podarcis_tree.pdf", height = 10, width = 10)
 px
 dev.off()
 ```
@@ -253,7 +253,7 @@ p4 = reshape2::melt(df3) %>% ggplot(aes(value, families, fill = variable)) + geo
 
 p5 = p3 + p4 + plot_layout(guides = "collect", axes = "collect_y") 
 
-pdf("../SquamateGenomics/Nb_chr_assm.perfam.pdf", width = 6, height = 9)
+pdf("Nb_chr_assm.perfam.pdf", width = 6, height = 9)
 p3
 dev.off()
 
