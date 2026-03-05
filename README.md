@@ -3,7 +3,7 @@
 This repository contains scripts used in the Springer Book "Statistical Population Genomics 2nd Edition", edited by J. Dutheil, chapter "Population and Evolutionary Genomics of Lizards and Snakes".
 
 
-Data for Squamates was downloaded from NCBI as shown in [20-04-2025.SquuamateGenomes.collectdata.Rmd](scripts/20-04-2025.SquuamateGenomes.collectdata.Rmd).
+Data for Squamates was downloaded from NCBI as shown in [20-04-2025.SquamateGenomes.collectdata.Rmd](scripts/20-04-2025.SquamateGenomes.collectdata.Rmd).
 
 Quality of each genome assembly was assessed with BUSCO. The script is available at [busco.sh](scripts/busco.sh).
 
