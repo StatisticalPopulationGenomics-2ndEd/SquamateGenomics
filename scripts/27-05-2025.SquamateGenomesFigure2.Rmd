@@ -39,10 +39,10 @@ library(ggnewscale)
 library(tidytree)
 library(ezRun)
 
-squamates_df = read.delim("../SquamateGenomics/NCBI_available_genomes.summary.July2025.txt")
+squamates_df = read.delim("../data/NCBI_available_genomes.summary.July2025.txt")
 squamates_df$speciesname = str_replace(squamates_df$speciesname, " ", "_")
-sqm_df = read.delim("../SquamateGenomics/squamates_Title_Science2024_family_classification.txt")
-tree = read.tree("../SquamateGenomics/squamates_Title_Science2024_ultrametric_constrained.tre")
+sqm_df = read.delim("../data/squamates_Title_Science2024_family_classification.txt")
+tree = read.tree("../data/squamates_Title_Science2024_ultrametric_constrained.tre")
 
 #Names differ between NCBI and the tree - here I unify what I managed to find
 squamates_df[squamates_df$speciesname == "Bofa_erlangeri",]$speciesname = "Lamprophis_erlangeri"
@@ -120,7 +120,7 @@ p1 = p1 +
 
 p1$data$label = str_replace(p1$data$label, "_", " ")
 
-pdf("../SquamateGenomics/Figure2.summary.pdf", width = 29, height =21)
+pdf("Figure2.summary.pdf", width = 29, height =21)
 p1
 dev.off()
 ```
