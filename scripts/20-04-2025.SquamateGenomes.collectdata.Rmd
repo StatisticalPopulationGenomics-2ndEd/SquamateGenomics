@@ -1,0 +1,350 @@
+---
+title: "Squamate genomes  - creating the data frames"
+author: "Natalia Zajac"
+date: "20/04/2025"
+output:
+  html_document: 
+    highlight: pygments
+    theme: sand
+    code_folding: hide
+    toc: yes
+    toc_depth: 4
+editor_options: 
+  chunk_output_type: inline
+---
+
+## Download genomes for all squamates available on NCBI
+
+```{r DownloadNCBI, include=FALSE}
+#Download squamate genomes
+library(rentrez)
+library(xml2)
+
+search_res <- entrez_search(
+    db = "assembly",
+    term = "squamata[Organism]",
+    retmax = 500,
+    use_history = TRUE
+)
+
+summary_res <- entrez_summary(
+    db = "assembly",
+    web_history = search_res$web_history
+)
+
+squamates_df = NULL
+for (i in names(summary_res)){
+  if (summary_res[[i]]$ftppath_refseq != "" || summary_res[[i]]$ftppath_genbank != ""){
+  name=i
+  taxon_id = summary_res[[i]]$taxid
+  lastmajorreleaseaccession = summary_res[[i]]$lastmajorreleaseaccession
+  assemblyname = summary_res[[i]]$assemblyname
+  species = summary_res[[i]]$organism
+  busco_complete = summary_res[[i]]$busco$complete
+  busco_singlecopy = summary_res[[i]]$busco$singlecopy
+  busco_fragmented = summary_res[[i]]$busco$fragmented
+  busco_duplicated = summary_res[[i]]$busco$duplicated
+  busco_missing = summary_res[[i]]$busco$missing
+  busco_lineage = summary_res[[i]]$busco$buscolineage
+  contig_n50 = summary_res[[i]]$contign50
+  scaffold_n50 = summary_res[[i]]$scaffoldn50
+  refseq_cat = summary_res[[i]]$refseq_category
+  genbank_id = summary_res[[i]]$synonym$genbank
+  refseq_id = summary_res[[i]]$synonym$refseq
+  speciesname = summary_res[[i]]$speciesname
+  assembly_status = summary_res[[i]]$assemblystatus
+  assembly_type = summary_res[[i]]$assemblytype
+  release_date = summary_res[[i]]$seqreleasedate
+  stats = summary_res[[i]]$ftppath_stats_rpt
+  if (summary_res[[i]]$annotrpturl != ""){
+    annotation = "annotated"
+  } else {
+    annotation = "not_annotated"
+  }
+  df = data.frame(cbind(name = i,taxon_id, species, speciesname, lastmajorreleaseaccession, assemblyname, genbank_id, refseq_cat, refseq_id, assembly_status, release_date, assembly_type, busco_complete, busco_singlecopy,busco_fragmented,  busco_duplicated,busco_missing,busco_lineage, contig_n50, scaffold_n50, annotation,stats))
+  squamates_df = rbind(squamates_df, df)
+  }}
+
+fasta_urls = NULL 
+for (i in unique(squamates_df$speciesname)){
+  if (nrow(squamates_df[squamates_df$speciesname == i & squamates_df$refseq_cat == "reference genome",]) != 0){
+    id = squamates_df[squamates_df$speciesname == i & squamates_df$refseq_cat == "reference genome",]$name
+    x = summary_res[[id]]
+    if (x$ftppath_genbank != "" & x$ftppath_refseq != ""){
+      ftp_path <- x$ftppath_refseq
+      } else if ( x$ftppath_refseq == ""){
+      ftp_path <- x$ftppath_genbank
+    } else {
+      ftp_path <- x$ftppath_refseq
+    }
+    if (!is.null(ftp_path) && ftp_path != "") {
+      asm_name <- basename(ftp_path)
+      fasta_urls[[i]] = paste0(ftp_path, "/", asm_name, "_genomic.fna.gz")
+    }
+  }
+}
+
+fasta_urls[["Prasinohaema aff. flavipes"]] = "ftp://ftp.ncbi.nlm.nih.gov/genomes/all/GCA/048/933/755/GCA_048933755.1_BYU_Pflav_v3/GCA_048933755.1_BYU_Pflav_v3_genomic.fna.gz"
+
+fasta_urls[["Dibamus cf. smithi"]] = "ftp://ftp.ncbi.nlm.nih.gov/genomes/all/GCA/046/126/795/GCA_046126795.1_rDibSmi1.hap1/GCA_046126795.1_rDibSmi1.hap1_genomic.fna.gz"
+
+assembly_stats = NULL
+for (i in unique(squamates_df$speciesname)){
+  if (nrow(squamates_df[squamates_df$speciesname == i & squamates_df$refseq_cat == "reference genome",]) != 0){
+    id = squamates_df[squamates_df$speciesname == i & squamates_df$refseq_cat == "reference genome",]$name
+    x = summary_res[[id]]
+    ftp_path <- x$ftppath_stats_rpt
+    assembly_stats[[i]] = ftp_path
+  }
+}
+
+assembly_stats[["Prasinohaema aff. flavipes"]] = summary_res[[squamates_df[squamates_df$speciesname == "Prasinohaema aff. flavipes",]$name]]$ftppath_stats_rpt
+
+assembly_stats[["Dibamus cf. smithi"]] = summary_res[[squamates_df[squamates_df$speciesname == "Dibamus cf. smithi",]$name[1]]]$ftppath_stats_rpt
+
+if (dir.exists("/groups/mpistaff/Zajac/squamate_genomes") == "FALSE") {
+  dir.create("/groups/mpistaff/Zajac/squamate_genomes", showWarnings = FALSE)
+  }
+
+#Download files
+for (i in names(fasta_urls)) {
+  url = fasta_urls[[i]]
+  destfile <- file.path("/groups/mpistaff/Zajac/squamate_genomes", basename(url))
+  if (file.exists(destfile) == "FALSE"){
+    message("Downloading: ", url)
+    download.file(url, destfile = destfile, mode = "wb")
+  }
+}
+
+for (i in names(assembly_stats)) {
+  url = assembly_stats[[i]]
+  destfile <- file.path("/groups/mpistaff/Zajac/squamate_genomes", basename(url))
+  if (file.exists(destfile) == "FALSE"){
+    message("Downloading: ", url)
+    download.file(url, destfile = destfile, mode = "wb")
+  }
+}
+
+library(RCurl)
+squamates_df$gff <- ""
+squamates_df$ftps <- dirname(squamates_df$stats)
+
+fetch_with_retry <- function(url, max_attempts = 5) {
+    attempt <- 1
+    while (attempt <= max_attempts) {
+        tryCatch({
+            result <- getURL(url, ftp.use.epsv = FALSE, dirlistonly = TRUE)
+            return(result)
+        }, error = function(e) {
+            message(sprintf("Attempt %d failed for %s: %s", attempt, url, e$message))
+            Sys.sleep(2 ^ attempt * 0.1)  
+            attempt <<- attempt + 1
+        })
+    }
+    return(NULL)  
+}
+
+for (i in unique(squamates_df$ftps)) {
+    print(i)
+    file_list <- fetch_with_retry(paste0(i, "/"))
+    
+    if (!is.null(file_list)) {
+        cat("Successfully accessed:", i, "\n")
+        file_names <- strsplit(file_list, "\r*\n")[[1]]
+        gff_files <- grep("\\.gff\\.gz$", file_names, value = TRUE)
+        print(gff_files)
+        
+        if (length(gff_files) > 0) {
+            idx <- which(squamates_df$ftps == i)
+            squamates_df$gff[idx] <- gff_files[1]  # or paste(gff_files, collapse = ",")
+        }
+    } else {
+        cat("Failed to access:", i, "\n")
+    }
+    
+    # Small delay to avoid hammering the server
+    Sys.sleep(0.5)
+}
+
+for (i in unique(squamates_df$gff)[-2]) {
+  url = paste0(dirname(squamates_df[squamates_df$gff == i,]$stats),"/",i)
+  destfile <- file.path("/groups/mpistaff/Zajac/squamate_genomes", basename(url))
+  if (file.exists(destfile) == "FALSE"){
+    message("Downloading: ", url)
+    download.file(url, destfile = destfile, mode = "wb")
+  }
+}
+
+#Count numnber of genes
+library(rtracklayer)
+squamates_df$number_of_genes = ""
+for (i in unique(squamates_df$gff)[-1]) {
+  file <- file.path("/groups/mpistaff/Zajac/squamate_genomes",i)
+  gff = readGFF(file)
+  squamates_df[squamates_df$gff == i,]$number_of_genes = nrow(gff[gff$type == "gene",])
+}
+
+
+squamates_df$total_length = ""
+squamates_df$gc_content = ""
+squamates_df$scaffold_n50 = ""
+
+for (i in names(assembly_stats)){
+  df = read.table(paste0("/groups/mpistaff/Zajac/squamate_genomes/", basename(assembly_stats[[i]])), sep="\t", header=FALSE, comment.char="#", stringsAsFactors=FALSE)
+  total_length = df[df$V1 == "all" & df$V5 == "total-length",]$V6[1]
+  gc_content = df[df$V1 == "all" & df$V5 == "gc-perc",]$V6[1]
+  scaffold_n50 = df[df$V1 == "all" & df$V5 == "scaffold-N50",]$V6[1]
+  squamates_df[squamates_df$speciesname == i & squamates_df$stats == assembly_stats[[i]],]$total_length = total_length
+  squamates_df[squamates_df$speciesname == i & squamates_df$stats == assembly_stats[[i]],]$gc_content = gc_content
+  squamates_df[squamates_df$speciesname == i & squamates_df$stats == assembly_stats[[i]],]$scaffold_n50 = scaffold_n50
+}
+
+squamates_df$nb_assemblies = ""
+squamates_df$chr_avail = ""
+
+for (i in unique(squamates_df$speciesname)){
+  df = squamates_df[squamates_df$speciesname ==i,]
+  if(nrow(df[grepl("Chromosome", df$assembly_status),]) > 0) {
+    squamates_df[squamates_df$speciesname ==i,]$chr_avail = "Yes"
+  } else {
+    squamates_df[squamates_df$speciesname ==i,]$chr_avail = "No"
+  }
+  squamates_df[squamates_df$speciesname ==i,]$nb_assemblies = length(unique(sapply(str_split(df$assemblyname, "\\."), .subset, 1)))
+}
+
+squamates_df[squamates_df$speciesname %in% squamates_df[grepl("PRI", squamates_df$assemblyname),]$speciesname,]$nb_assemblies = 2
+
+mask = read.delim("/groups/mpistaff/Zajac/squamate_genomes/masking_results.txt", header = F, sep = "\t")
+colnames(mask) = c("assembly", "total_bases", "masked_bases")
+mask$accesion = paste0(sapply(str_split(mask$assembly, "_"), .subset,1), "_", sapply(str_split(mask$assembly, "_"), .subset,2))
+mask$proportion_masked = round((mask$masked_bases*100)/mask$total_bases,2)
+mask[mask$accesion == "GCF_001527695.2",]$accesion = "GCF_001527695.1"
+squamates_df = merge(squamates_df, mask[,c(4,5)], by.x = "lastmajorreleaseaccession", by.y = "accesion", all.x = TRUE)
+```
+
+## Collect BUSCO results
+
+
+```{r BUSCO, include=FALSE}
+busco_files = list.files("../SquamateGenomics/", pattern = "short_summary.specific.sauropsida_odb12", recursive = TRUE)[grepl(".txt", list.files("../SquamateGenomics/", pattern = "short_summary.specific.sauropsida_odb12", recursive = TRUE))]
+busco_files = file.path("../SquamateGenomics",busco_files)
+
+busco_results = NULL
+for (i in busco_files){
+  name = str_remove(str_remove(str_remove(sapply(str_split(i, "/"), .subset ,4), ".fasta"), "short_summary.specific.sauropsida_odb12."), ".txt")
+  name = paste0(sapply(str_split(name, "_"), .subset, 1),"_",sapply(str_split(name, "_"), .subset, 2))
+  line8 <- readLines(i, n = 9)[9]
+  line8 = data.frame(str_split(sapply(str_split(line8, "\t"), .subset, 2), ","))
+  colnames(line8) = name
+  line8[[1]] = sapply(str_split(line8[[1]], ":"), .subset, 2)
+  line8[[1]] = as.numeric(str_remove(str_remove(str_remove(line8[[1]], "%"), "\\[S"), "\\]"))
+  rownames(line8) = c("Complete", "Duplicated", "Framgented", "Missing", "n", "E")
+  if (is.null(busco_results) == TRUE){
+    busco_results = line8
+  } else {
+    busco_results = cbind(busco_results, line8)
+  }
+}
+
+single = busco_results[1,] - busco_results[2,]
+busco_results <- rbind(busco_results, single)
+rownames(busco_results)[nrow(busco_results)] <- "Single"
+
+busco_results = reshape2::melt(busco_results[c(1,7,2,3,4),] %>% data.frame() %>% rownames_to_column()) %>% pivot_wider(names_from = rowname, values_from = value) %>% mutate(accesion = variable) %>% dplyr::select(c(-1))
+busco_results$accesion = as.character(busco_results$accesion)
+busco_results[busco_results$accesion == "GCF_001527695.2",]$accesion = "GCF_001527695.1"
+
+squamates_df = merge(squamates_df[,c(-13,-14,-15,-16,-17,-18)], busco_results, by.x = "lastmajorreleaseaccession", by.y = "accesion", all.x = TRUE)
+
+write_delim(squamates_df, "../SquamateGenomics/NCBI_available_genomes.summary.July2025.txt", delim = "\t", quote = "none")
+```
+
+## Download the phylogeny and classify species according to families and major clades
+
+```{r Phylogeny, include=FALSE}
+#phylogeny obtained from https://raw.githubusercontent.com/macroevolution/squamata/main/data/1.tree_inference/mainTrees/squamates_Title_Science2024_ultrametric_constrained.tre
+
+library(rentrez)
+library(xml2)
+library(ape)
+library(ggtree)
+library(phytools)
+library(dplyr)
+library(tidyverse)
+
+
+get_family_from_species <- function(species_name) {
+  # Replace underscore with space for proper querying
+  species_query <- gsub("_", " ", species_name)
+  
+  # Search NCBI Taxonomy for the species
+  search_res <- entrez_search(db = "taxonomy", term = species_query)
+  
+  if (length(search_res$ids) == 0) {
+    return(NA)
+  }
+  
+  if (length(search_res$ids) > 1) {
+    return("For manual review")
+  }
+  
+  # Fetch full taxonomy record in XML format
+  tax_xml <- entrez_fetch(db = "taxonomy", id = search_res$ids[1], rettype = "xml")
+  xml <- read_xml(tax_xml)
+  
+  # Extract all lineage nodes
+  lineage_nodes <- xml_find_all(xml, ".//LineageEx/Taxon")
+  
+  # Look for node with rank "family"
+  for (node in lineage_nodes) {
+    rank <- xml_text(xml_find_first(node, "Rank"))
+    if (rank == "family") {
+      family_name <- xml_text(xml_find_first(node, "ScientificName"))
+      return(family_name)
+    }
+  }
+  
+  return(NA)  # If no family found
+}
+
+tree = read.tree("SquamateGenomics/squamates_Title_Science2024_ultrametric_constrained.tre")
+species_list = tree$tip.label
+
+families <- sapply(species_list, get_family_from_species)
+names(families) <- species_list
+families2 = data.frame(families) %>% rownames_to_column("label")
+families2[which(families2$families == "For manual review"),]$families = "Anguidae"
+families2[which(families2$label %in% c("Plagiopholis_styani", "Plagiopholis_blakewayi")),]$families = c(rep("Colubridae", 2))
+families2[which(families2$label == "Lampropeltis_leonis"),]$families = "Colubridae"
+
+sqm_df = as_tibble(tree)
+sqm_df= merge(sqm_df, families2, by = "label")
+sqm_df$clade = ""
+sqm_df[sqm_df$node %in% c(1:1943),]$clade = "Alethinophidia" 
+sqm_df[sqm_df$node %in% c(1944:2094),]$clade = "Scolecophidia"
+sqm_df[sqm_df$node %in% c(2095:3588),]$clade = "Iguania"
+sqm_df[sqm_df$node %in% c(3589:3733),]$clade = "Anguiformes"
+sqm_df[sqm_df$node %in% c(3734:4016),]$clade = "Lacertoidea"
+sqm_df[sqm_df$node %in% c(4017:4096),]$clade = "Amphisbaenia"
+sqm_df[sqm_df$node %in% c(4097:4363),]$clade = "Teioidea"
+sqm_df[sqm_df$node %in% c(4364:5556),]$clade = "Scincoidea"
+sqm_df[sqm_df$node %in% c(5557:6876),]$clade = "Gekkota"
+sqm_df[sqm_df$node %in% c(6877:6885),]$clade = "Dibamidae" 
+
+tree_v2 = tree
+tree_v2$tip.label = sapply(tree_v2$tip.label, function(x){setNames(sqm_df$clade, sqm_df$label)[[x]]})
+na_tips <- which(is.na(tree_v2$tip.label))
+tree_v2 <- drop.tip(tree_v2, tip = na_tips)
+dup_labels = unique(tree_v2$tip.label[duplicated(tree_v2$tip.label)])
+dup_labels_monophyletic = NULL
+for (i in dup_labels){
+  family_tips <- tree_v2$tip.label == i
+  if (is.monophyletic(tree_v2, tree_v2$tip.label[family_tips])) {
+    dup_labels_monophyletic = c(dup_labels_monophyletic, i) 
+  }
+}
+
+dup_labels == dup_labels_monophyletic
+
+write_delim(sqm_df, "SquamateGenomics/squamates_Title_Science2024_family_classification.txt", delim = "\t", quote = "none")
+```

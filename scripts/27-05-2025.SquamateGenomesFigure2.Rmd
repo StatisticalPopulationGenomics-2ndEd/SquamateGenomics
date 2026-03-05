@@ -1,0 +1,128 @@
+---
+title: "Squamate genome summary plots"
+author: "Natalia Zajac"
+date: "22/05/2025"
+output:
+  html_document: 
+    highlight: pygments
+    theme: sand
+    code_folding: hide
+    toc: yes
+    toc_depth: 4
+editor_options: 
+  chunk_output_type: inline
+---
+
+
+```{r include=FALSE}
+knitr::opts_chunk$set(
+  comment = '', fig.width = 8, fig.height = 8, warning = FALSE, error = FALSE,
+  message = FALSE, cache = TRUE, echo = FALSE
+)
+```
+
+# {.tabset}
+
+```{r setup countQC, include=FALSE}
+library(rentrez)
+library(xml2)
+library(ape)
+library(ggtree)
+library(phytools)
+library(dplyr)
+library(tidyverse)
+library(ggtreeExtra)
+library(ggstar)
+library(cowplot)
+library(patchwork)
+library(ggnewscale)
+library(tidytree)
+library(ezRun)
+
+squamates_df = read.delim("../SquamateGenomics/NCBI_available_genomes.summary.July2025.txt")
+squamates_df$speciesname = str_replace(squamates_df$speciesname, " ", "_")
+sqm_df = read.delim("../SquamateGenomics/squamates_Title_Science2024_family_classification.txt")
+tree = read.tree("../SquamateGenomics/squamates_Title_Science2024_ultrametric_constrained.tre")
+
+#Names differ between NCBI and the tree - here I unify what I managed to find
+squamates_df[squamates_df$speciesname == "Bofa_erlangeri",]$speciesname = "Lamprophis_erlangeri"
+squamates_df[squamates_df$speciesname == "Geophis_sartorii",]$speciesname = "Tropidodipsas_sartorii"
+squamates_df[squamates_df$speciesname == "Urosaurus_nigricauda",]$speciesname = "Urosaurus_nigricaudus"
+
+#Eliminate the contaminated assembly
+squamates_df = squamates_df[squamates_df$speciesname != "Hydrophis_hardwickii",]
+
+#Final annoation verdict
+squamates_df = squamates_df %>% mutate(final_annotation = case_when(annotation == "annotated" ~ 1, annotation == "not_annotated" & gff == "" ~ 0, annotation == "not_annotated" & gff != "" ~ 1))
+```
+
+## Subset to clades with species with genomes
+
+```{r annotate, include=FALSE}
+
+to_drop = setdiff(tree$tip.label, squamates_df$speciesname)
+tree_reduced <- drop.tip(tree, to_drop)
+
+tree_reduced_df = merge(as.tibble(tree_reduced), sqm_df[,c(1,5,6)], by = "label")
+
+gen_nodes <- 
+  tree_reduced_df %>%
+  group_split(clade) %>%
+  purrr::map(pull, node)
+
+# clade names
+gnamesvec <- tree_reduced_df %>%
+  group_split(clade) %>%
+  purrr::map(pull, clade) %>%
+  purrr::map(unique)
+
+# define function for getting MRCA node
+getCladeNode <- function(tree, nodesvec, gname) {
+  nodenum <- getMRCA(tree, tip = nodesvec)
+  if (is.null(nodenum)){
+    tibble(clade = gname, node = nodesvec)
+  } else {
+    tibble(clade = gname, node = nodenum)
+  }
+}
+
+genNodes <-
+  purrr::map2_df(gen_nodes, gnamesvec,
+                 ~ getCladeNode(tree_reduced, .x, .y))
+genNodes$color = brewPalette(n=10)[c(-4)]
+
+#Subeset data to only reference genomes plus add those that don't have designated reference genomes
+df = squamates_df[squamates_df$refseq_cat == "reference genome",]
+df2 = squamates_df[squamates_df$speciesname %in%  setdiff(squamates_df$speciesname, unique(squamates_df[squamates_df$refseq_cat == "reference genome",]$speciesname)),][c(1,2,4),]
+df_for_plotting = rbind(df,df2)
+df_for_plotting = df_for_plotting[df_for_plotting$speciesname %in% tree_reduced$tip.label,]
+
+p1 = ggtree(tree_reduced) +
+  geom_tiplab(size = 2, fontface = 3, offset = 3) + 
+  xlim_expand(c(0,310), panel = "Tree")
+
+p1 = p1 %<+% sqm_df[,c(1,5,6)] + geom_tippoint(aes(color=clade)) + scale_color_manual(values = brewPalette(n=10)[-4]) + labs(color = "Clade")
+
+p1 = p1 + 
+  geom_point2(aes(subset=(node == getMRCA(tree_reduced, tree_reduced_df[grepl("Podarcis", tree_reduced_df$label),]$node))), shape=8, size=8, color='red')
+
+p1 = p1 + 
+  new_scale_fill() + 
+  geom_facet(panel = "GC content (%)", data = df_for_plotting[,c(5,21)], geom = geom_point, mapping=aes(x = gc_content, y = y),size = 3, color = "red", inherit.aes = FALSE) + 
+  geom_facet(panel = "Genome Length (Gb)", data = df_for_plotting[,c(5,20)] , geom = geom_col,mapping=aes(x = total_length/1000000000, y = y), orientation = 'y', width = .6,inherit.aes = FALSE) + 
+  geom_facet(panel = "Scaffold N50 (log10)", data = df_for_plotting[,c(5,14)] , geom = geom_col,mapping=aes(x = log10(scaffold_n50), y = y), orientation = 'y', width = .6,inherit.aes = FALSE) +
+  geom_facet(panel = "BUSCO Complete (%)", data = df_for_plotting[,c(5,25)], geom = geom_point, mapping=aes(x = Complete, y = y), size = 3, color = "blue", inherit.aes = FALSE) +
+  geom_facet(panel = "Masked (%)", data = df_for_plotting[,c(5,24)], geom = geom_point, mapping=aes(x = proportion_masked, y = y), size = 3, color = "darkorange2", inherit.aes = FALSE) + 
+  geom_facet(panel = "Annotation available", data = df_for_plotting[df_for_plotting$final_annotation == 1,c(5,30)], geom = geom_point, mapping=aes(x = final_annotation, y = y),size = 3, color = "darkgreen", inherit.aes = FALSE) +
+  theme_bw() + 
+  theme(strip.text.x = element_text(size = 25), axis.text.x = element_text(size = 20),axis.title.x = element_text(),axis.ticks.x = element_line(), legend.text = element_text(size = 20), legend.title = element_text(size = 20), plot.margin = unit(c(0.5, 0.5, 0.5, 0.5), "inches"), legend.position = "top") + 
+  guides(colour = guide_legend(override.aes = list(size=5))) + labs(caption = "Missing data for Scaffold N50 indicates the reference is a contig-level assembly") + theme(plot.caption = element_text(hjust = 0, size = 15))
+
+p1$data$label = str_replace(p1$data$label, "_", " ")
+
+pdf("../SquamateGenomics/Figure2.summary.pdf", width = 29, height =21)
+p1
+dev.off()
+```
+
+

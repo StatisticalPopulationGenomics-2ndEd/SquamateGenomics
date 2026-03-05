@@ -1,0 +1,183 @@
+---
+title: "Mammalia/ Aves"
+author: "Natalia Zajac"
+date: "18/02/2025"
+output:
+  html_document: 
+    highlight: pygments
+    theme: sand
+    code_folding: hide
+    toc: yes
+    toc_depth: 4
+editor_options: 
+  chunk_output_type: inline
+---
+
+
+```{r include=FALSE}
+knitr::opts_chunk$set(
+  comment = '', fig.width = 8, fig.height = 8, warning = FALSE, error = FALSE,
+  message = FALSE, cache = TRUE, echo = FALSE
+)
+library(dplyr)
+library(tidyverse)
+
+squamates_df = read.delim("../SquamateGenomics/NCBI_available_genomes.summary.July2025.txt")
+squamates_df$speciesname = str_replace(squamates_df$speciesname, " ", "_")
+sqm_df = read.delim("../SquamateGenomics/squamates_Title_Science2024_family_classification.txt")
+tree = read.tree("../SquamateGenomics/squamates_Title_Science2024_ultrametric_constrained.tre")
+sqm_df2 = merge(sqm_df, squamates_df, by.x = "label", by.y = "speciesname", all.x = TRUE) 
+```
+
+# {.tabset}
+
+## Mammalia
+
+```{r mammals}
+mams = read.delim("../SquamateGenomics/Mammalia_Aves/MDD_v2.2_6815species.csv", sep = ",")
+mams = mams[mams$extinct == 0,]
+mams_ncbi = read.delim("../SquamateGenomics/Mammalia_Aves/Mammalia_ncbi_dataset.tsv", sep = "\t")
+mams_ncbi$Organism.Name = paste0(sapply(str_split(mams_ncbi$Organism.Name, " "), .subset, 1), "_", sapply(str_split(mams_ncbi$Organism.Name, " "), .subset, 2))
+mams_ncbi = mams_ncbi[mams_ncbi$Assembly.Level %in% c("Complete Genome", "Chromosome"),]
+
+mams = merge(mams, mams_ncbi, by.x = "sciName", by.y = "Organism.Name", all.x = TRUE)
+
+species_per_order = mams %>% group_by(order) %>% summarise(species = n_distinct(sciName))
+assemblies_per_species = mams %>% filter(!is.na(Assembly.Accession)) %>% group_by(sciName) %>% summarise(assemblies = n_distinct(Assembly.Accession))
+order_species = mams[,c(1,10)]
+
+tmp_mams = merge(merge(order_species, assemblies_per_species, by = "sciName", all.x = TRUE) %>% mutate(assemblies = if_else(is.na(assemblies), 0, assemblies)) , species_per_order, by = "order", all.x = TRUE) %>% unique() %>% group_by(order, species) %>% summarise(Yes = sum(assemblies > 0, na.rm = TRUE)) %>% mutate(No = species - Yes) %>% reshape2::melt(id.vars = c("order", "species"))
+
+p1 = tmp_mams %>% ggplot(aes(value, order, fill = variable)) + geom_col(position = "fill") + scale_fill_manual(values = c("purple", "grey")) 
+p2=tmp_mams %>% ggplot(aes(value, order, fill = variable)) + geom_col(position = "stack") + scale_fill_manual(values = c("purple", "grey")) + scale_x_sqrt()
+
+
+species = length(unique(mams$sciName))
+assemblies_per_species = mams %>% filter(!is.na(Assembly.Accession)) %>% group_by(sciName) %>% summarise(assemblies = n_distinct(Assembly.Accession))
+species_with_genomes = length(unique(assemblies_per_species$sciName))
+species_with_genomes/species
+
+```
+
+## Aves
+
+```{r aves}
+aves = readxl::read_xlsx("../SquamateGenomics/Mammalia_Aves/AviList-v2025-11Jun-extended.xlsx")
+aves = aves[aves$Taxon_rank == "species",]
+aves_ncbi = read.delim("../SquamateGenomics/Mammalia_Aves/Aves_ncbi_dataset.tsv", sep = "\t")
+aves_ncbi$Organism.Name = paste0(sapply(str_split(aves_ncbi$Organism.Name, " "), .subset, 1), " ", sapply(str_split(aves_ncbi$Organism.Name, " "), .subset, 2))
+aves_ncbi = aves_ncbi[aves_ncbi$Assembly.Level %in% c("Complete Genome", "Chromosome"),]
+
+aves = merge(aves, aves_ncbi, by.x = "Scientific_name", by.y = "Organism.Name", all.x = TRUE)
+
+species_per_order = aves %>% group_by(Order) %>% summarise(species = n_distinct(Scientific_name))
+assemblies_per_species = aves %>% filter(!is.na(Assembly.Accession)) %>% group_by(Scientific_name) %>% summarise(assemblies = n_distinct(Assembly.Accession))
+order_species = aves[,c(1,4)]
+
+tmp_aves = merge(merge(order_species, assemblies_per_species, by = "Scientific_name", all.x = TRUE), species_per_order, by = "Order", all.x = TRUE) %>% unique() %>% group_by(Order, species) %>% summarise(Yes = sum(assemblies > 0, na.rm = TRUE)) %>% mutate(No = species - Yes) %>% reshape2::melt(id.vars = c("Order", "species"))
+
+p1 = tmp_aves %>% ggplot(aes(value, Order, fill = variable)) + geom_col(position = "fill") + scale_fill_manual(values = c("purple", "grey")) 
+p2=tmp_aves %>% ggplot(aes(value, Order, fill = variable)) + geom_col(position = "stack") + scale_fill_manual(values = c("purple", "grey")) + scale_x_sqrt()
+
+
+species = length(unique(aves$Scientific_name))
+assemblies_per_species = aves %>% filter(!is.na(Assembly.Accession)) %>% group_by(Scientific_name) %>% summarise(assemblies = n_distinct(Assembly.Accession))
+species_with_genomes = length(unique(assemblies_per_species$Scientific_name))
+species_with_genomes/species
+```
+
+
+## Amphibians
+
+```{r amphs}
+library(xml2)
+xmldoc <- xml2::read_xml("../SquamateGenomics/Mammalia_Aves/amphib_dump.xml")
+xlist <- xml2::as_list(xmldoc)
+result_df <- as_tibble(map_dfr(
+    xlist[[1]],
+    ~ set_names(
+        x = as.data.frame(.),
+        names(.)
+    )
+))
+result_df[] <- lapply(result_df, function(x) gsub("\n", "", x))
+result_df$Scientific_name = paste0(result_df$genus, " ", result_df$specificepithet)
+
+amphs_ncbi = read.delim("../SquamateGenomics/Mammalia_Aves/Amphibia_ncbi_dataset.tsv", sep = "\t")
+amphs_ncbi$Organism.Name = paste0(sapply(str_split(amphs_ncbi$Organism.Name, " "), .subset, 1), " ", sapply(str_split(amphs_ncbi$Organism.Name, " "), .subset, 2))
+amphs_ncbi = amphs_ncbi[amphs_ncbi$Assembly.Level %in% c("Complete Genome", "Chromosome"),]
+
+amphs = merge(result_df, amphs_ncbi, by.x = "Scientific_name", by.y = "Organism.Name", all.x = TRUE)
+
+species_per_order = amphs %>% group_by(ordr) %>% summarise(species = n_distinct(Scientific_name))
+assemblies_per_species = amphs %>% filter(!is.na(Assembly.Accession)) %>% group_by(Scientific_name) %>% summarise(assemblies = n_distinct(Assembly.Accession))
+order_species = amphs[,c(1,3)]
+
+tmp_amphs = merge(merge(order_species, assemblies_per_species, by = "Scientific_name", all.x = TRUE), species_per_order, by = "ordr", all.x = TRUE) %>% unique() %>% group_by(ordr, species) %>% summarise(Yes = sum(assemblies > 0, na.rm = TRUE)) %>% mutate(No = species - Yes) %>% reshape2::melt(id.vars = c("ordr", "species"))
+
+p1 = tmp_amphs %>% ggplot(aes(value, ordr, fill = variable)) + geom_col(position = "fill") + scale_fill_manual(values = c("purple", "grey")) 
+p2=tmp_amphs %>% ggplot(aes(value, ordr, fill = variable)) + geom_col(position = "stack") + scale_fill_manual(values = c("purple", "grey")) + scale_x_sqrt()
+
+species = length(unique(amphs$Scientific_name))
+assemblies_per_species = amphs %>% filter(!is.na(Assembly.Accession)) %>% group_by(Scientific_name) %>% summarise(assemblies = n_distinct(Assembly.Accession))
+species_with_genomes = length(unique(assemblies_per_species$Scientific_name))
+species_with_genomes/species
+```
+
+
+##Combined
+
+missing in species database but present in NCBI - mammals - 13, birds - 8 and amphibians - 3
+
+```{r comb, fig.height=11, fig.width=7}
+library(patchwork)
+library(cowplot)
+colnames(tmp_amphs) = c("Order", "species", "variable", "value")
+tmp_amphs$Class = "Amphibia" 
+colnames(tmp_aves) = c("Order", "species", "variable", "value")
+tmp_aves$Class = "Aves" 
+colnames(tmp_mams) = c("Order", "species", "variable", "value")
+tmp_mams$Class = "Mammalia" 
+
+tmp = rbind(tmp_amphs, tmp_aves,tmp_mams)
+p2 = tmp %>% ggplot(aes(value, Order, fill = variable)) + geom_col(position = "fill")+ ggforce::facet_col(vars(Class), space="free", scale="free_y") + scale_fill_manual(values = c("purple", "grey")) + labs(fill = "Chromosomal level assembly available", x = "Percentage") + theme(legend.position = "top") + scale_x_continuous(labels = scales::percent_format())
+p1=tmp %>% ggplot(aes(value, Order, fill = variable)) + geom_col(position = "stack")+ ggforce::facet_col(vars(Class), space="free", scale="free_y") + scale_fill_manual(values = c("purple", "grey")) + scale_x_sqrt() + labs(fill = "Chromosomal level assembly available", x = "Number of species", caption = "Sources: \nMammalia: ASM Mammal Diversity Database v2.2\nAves: AviBase 11June2025\nAmphibia: AmphibiaWeb v18June2025") + theme(legend.position = "top", plot.caption = element_text(hjust = 0))
+
+pdf("../SquamateGenomics/Mammals_Aves_Amphibians.pdf", height = 10, width = 7)
+p1+p2 + plot_layout(guides = "collect", axes = "collect_y") & theme(legend.position = 'top')
+dev.off()
+```
+
+
+## Combined plot for aves, amphibians, mammals and squamates
+
+```{r comb, fig.height=11, fig.width=7}
+squamates = sqm_df2 %>% group_by(chr_avail) %>% summarise("Genomes" = n_distinct(label)) %>% mutate(total = sum(Genomes)) %>% mutate(percentage =  Genomes/total) %>% filter(chr_avail == "Yes") %>% mutate("Assembly.Level" = "Chromosome") %>% mutate("Group" = "Squamata")
+squamates = squamates[,c(5,2,3,4, 6)]
+squamates$total = 12249
+squamates$percentage = squamates$Genomes/squamates$total
+
+amphibians = amphs %>% group_by(Assembly.Level) %>% summarise("Genomes" = n_distinct(Scientific_name)) %>% mutate(total = sum(Genomes)) %>% mutate(percentage =  Genomes/total) %>% filter(  Assembly.Level == "Chromosome") %>% mutate("Group" = "Amphibia")
+
+birds = aves %>% group_by(Assembly.Level) %>% summarise("Genomes" = n_distinct(Scientific_name)) %>% mutate(total = sum(Genomes)) %>% mutate(percentage =  Genomes/total) %>% filter(  Assembly.Level == "Chromosome") %>% mutate("Group" = "Aves")
+
+mammals = mams %>% group_by(Assembly.Level) %>% summarise("Genomes" = n_distinct(sciName)) %>% mutate(total = sum(Genomes)) %>% mutate(percentage = Genomes/total) %>% filter(  Assembly.Level == "Chromosome") %>% mutate("Group" = "Mammalia")
+
+all = rbind(squamates, amphibians, birds, mammals)
+
+scale_factor <- 1  
+
+p = ggplot(all, aes(x = Group)) +
+    geom_col(aes(y = total/1000), fill = "steelblue", width = 0.6) +
+    geom_point(aes(y = percentage * 100), color = "firebrick", size = 4) +
+    scale_y_continuous(
+        name = "Number of Species [1e3]",
+        sec.axis = sec_axis(~ . / scale_factor, name = "% of chromosome level assemblies")
+    ) +
+    theme_bw() + theme(axis.title.x = element_blank(), text = element_text(size = 15))
+
+pdf("../SquamateGenomics/Mammals_Aves_Amphibians_Squamates.pdf", height = 3.8, width = 10)
+p
+dev.off()
+
+```

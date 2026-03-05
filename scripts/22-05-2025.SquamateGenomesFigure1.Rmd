@@ -1,0 +1,260 @@
+---
+title: "Squamate genome summary plots"
+author: "Natalia Zajac"
+date: "22/05/2025"
+output:
+  html_document: 
+    highlight: pygments
+    theme: sand
+    code_folding: hide
+    toc: yes
+    toc_depth: 4
+editor_options: 
+  chunk_output_type: inline
+---
+
+
+```{r include=FALSE}
+knitr::opts_chunk$set(
+  comment = '', fig.width = 8, fig.height = 8, warning = FALSE, error = FALSE,
+  message = FALSE, cache = TRUE, echo = FALSE
+)
+```
+
+# {.tabset}
+
+```{r setup countQC, include=FALSE}
+library(rentrez)
+library(xml2)
+library(ape)
+library(ggtree)
+library(phytools)
+library(dplyr)
+library(tidyverse)
+library(ggtreeExtra)
+library(ggstar)
+library(cowplot)
+library(patchwork)
+library(ggnewscale)
+library(tidytree)
+library(ezRun)
+library(ggh4x)
+
+squamates_df = read.delim("../SquamateGenomics/NCBI_available_genomes.summary.July2025.txt")
+squamates_df$speciesname = str_replace(squamates_df$speciesname, " ", "_")
+sqm_df = read.delim("../SquamateGenomics/squamates_Title_Science2024_family_classification.txt")
+tree = read.tree("../SquamateGenomics/squamates_Title_Science2024_ultrametric_constrained.tre")
+
+#Names differ between NCBI and the tree - here I unify what I managed to find
+squamates_df[squamates_df$speciesname == "Bofa_erlangeri",]$speciesname = "Lamprophis_erlangeri"
+squamates_df[squamates_df$speciesname == "Geophis_sartorii",]$speciesname = "Tropidodipsas_sartorii"
+squamates_df[squamates_df$speciesname == "Urosaurus_nigricauda",]$speciesname = "Urosaurus_nigricaudus"
+
+```
+
+## Possible trees
+
+```{r trees}
+
+# node numbers per genus 
+gen_nodes <- 
+  sqm_df %>%
+  group_split(clade) %>%
+  purrr::map(pull, node)
+
+# clade names
+gnamesvec <- sqm_df %>%
+  group_split(clade) %>%
+  purrr::map(pull, clade) %>%
+  purrr::map(unique)
+
+# define function for getting MRCA node
+getCladeNode <- function(tree, nodesvec, gname) {
+  nodenum <- getMRCA(tree, tip = nodesvec)
+  tibble(clade = gname, node = nodenum)
+}
+
+genNodes <-
+  purrr::map2_df(gen_nodes, gnamesvec,
+                 ~ getCladeNode(tree, .x, .y))
+genNodes$color = brewPalette(n=10)
+
+#Plot tree
+sqm_tree <- ggtree(tree,size=0.1, layout = "circular")
+
+#Collapse nodes
+collapsed_tree <-   
+  purrr::reduce(
+    genNodes$node,
+    \(x,y) ggtree::collapse(x,y,mode = "max",fill=genNodes[genNodes$node == y,]$color,
+                    color="black",size=0.1,),
+    .init = sqm_tree
+  )
+
+#Only label monophyletic families
+p1 = purrr::reduce2(
+  genNodes$node,
+  genNodes$clade,
+  \(x,y,z) x + geom_cladelab(
+    node=y,label=z,
+    barsize = 1, offset = -1,
+    offset.text = 0.1,
+    vjust = 0, 
+    align= TRUE,
+    angle = "auto",
+    fontsize = 5
+  ) + geom_hilight(node=y, fill=genNodes[genNodes$node == y,]$color, alpha=.6),
+  .init = sqm_tree
+) + hexpand(1, direction = 1)
+
+#Collapse and label
+p2 = purrr::reduce2(
+  genNodes$node,
+  genNodes$clade,
+  \(x,y,z) x + geom_cladelab(
+    node=y,label=z,
+    barsize = 1, offset = -1,
+    offset.text = 0.1,
+    vjust = 0, 
+    align= TRUE,
+    angle = "auto",
+    fontsize = 5
+  ),
+  .init = collapsed_tree
+) + hexpand(1, direction = 1)
+
+plot_grid(collapsed_tree, p1, p2, ncol = 3)
+```
+
+## Choose the best display and annotate the tree
+
+```{r annotate, include=FALSE}
+
+sqm_df2 = merge(sqm_df, squamates_df[,], by.x = "label", by.y = "speciesname", all.x = TRUE)
+
+p1 = sqm_tree + geom_hilight(data =genNodes, aes(node=node, fill=clade), alpha=.6) + scale_fill_manual(name = "Clade", values = genNodes$color)
+
+sqm_df_subset = sqm_df2[!is.na(sqm_df2$genbank_id),]
+sqm_df_subset = sqm_df_subset %>% mutate("Genome" = "yes") 
+sqm_df_subset[sqm_df_subset$chr_avail == "No",]$chr_avail = NA
+
+p1 = p1 + new_scale_fill() + 
+    geom_fruit(
+        data=sqm_df_subset,
+        geom=geom_star,
+        mapping=aes(y=label, fill=nb_assemblies, size=nb_assemblies),
+        starshape=15,
+        pwidth=1,
+        inherit.aes = TRUE,
+        grid.params=list(
+            linetype=3,
+            size=0.2
+        )
+        
+    ) +
+    scale_fill_gradientn(name ="Number and availability of assemblies", guide = "legend", colours = c("darkslategray1", "darkslategray2", "darkslategray3", "darkslategray4"), breaks = seq(1, 4, by=1)) +
+    scale_size_continuous(name="Number and availability of assemblies",range = c(1, 4)) 
+
+p1 = p1 + new_scale_fill() + 
+    geom_fruit(
+        data=sqm_df_subset[!is.na(sqm_df_subset$chr_avail),],
+        geom=geom_star,
+        mapping=aes(y=label, fill=chr_avail),
+        starshape=15,
+        pwidth=1,
+        inherit.aes = TRUE,
+        grid.params=list(
+            linetype=3,
+            size=0.2
+        )
+        
+    ) +
+    scale_fill_manual(
+        name="Chromosome level assembly available",
+        values=c("purple"),
+        guide=guide_legend(keywidth=0.5, keyheight=0.5, order=4,
+                           override.aes=list(
+                               starshape=c("Yes"=15),
+                               size=5)
+        ),
+        na.translate=FALSE,
+    )
+
+p1 = p1 + 
+  geom_point2(aes(subset=(node == getMRCA(tree, sqm_df_subset[grepl("Podarcis", sqm_df_subset$label),]$node))), 
+              shape=8, size=5, color='red')
+
+pdf("../SquamateGenomics/Full_Tree.pdf", height = 9, width = 13)
+p1
+dev.off()
+```
+
+
+## Subset to clades with high number of chromosomal level assemblies
+
+```{r annotate, include=FALSE}
+nodes <- grep("Podarcis", tree$tip.label)
+tree <- groupOTU(tree, nodes)
+clade <- MRCA(tree, nodes)
+x <- tidytree::tree_subset(tree, clade, levels_back = 0)
+pod_df = merge(as_tibble(x), sqm_df2, by = "label")
+pod_df_subset = pod_df[!is.na(pod_df$genbank_id),]
+pod_df_subset = pod_df_subset %>% mutate("Genome" = "yes") 
+#x$tip.label = str_replace(x$tip.label , "_", " ")
+px = ggtree(x, layout = "fan", open.angle = 270)  + geom_tiplab(fontface = 3, align = TRUE, offset = 2) + xlim(0,30) 
+
+
+
+px = px + 
+    geom_fruit(
+        data=pod_df_subset[!is.na(pod_df_subset$chr_avail),],
+        geom=geom_star,
+        mapping=aes(y=label, fill=chr_avail),
+        starshape=15, size = 5, pwidth = 0.5,
+        inherit.aes = FALSE,
+        grid.params=list(
+            linetype=3,
+            size=0.2
+        )
+        
+    ) +
+    scale_fill_manual(
+        name="",
+        values=c("purple"),
+        guide=guide_legend(keywidth=0.5, keyheight=0.5, order=4,
+                           override.aes=list(
+                               starshape=c("Yes"=15),
+                               size=5)
+        ),
+        na.translate=FALSE,
+    ) + theme(legend.position = "")
+
+px$data$label = str_replace(px$data$label, "_", " ")
+
+pdf("../SquamateGenomics/Podarcis_tree.pdf", height = 10, width = 10)
+px
+dev.off()
+```
+
+
+## Number of chr level assemblies per family
+
+```{r annotate, include=FALSE}
+
+df1 = sqm_df2 %>% group_by(families, clade, chr_avail) %>% summarise(chr_level_genomes = n_distinct(label)) %>% filter(chr_avail == "Yes")
+df2 = sqm_df2 %>% group_by(families,clade) %>% summarise(genome_nb = n_distinct(label))
+df3 = merge(df2, df1, by = c("families", "clade"), all.x = TRUE) %>% filter(!is.na(families)) %>% dplyr::select(-4) %>% replace(is.na(.),0)
+df3$genome_nb = df3$genome_nb - df3$chr_level_genomes
+
+strip = strip_themed(background_y = elem_list_rect(fill = brewPalette(n = 10)))
+p3 = reshape2::melt(df3) %>% ggplot(aes(value, families, fill = variable)) + geom_col(position = "stack") + scale_fill_manual(values = c("grey", "purple")) + labs(fill = "Category", x = "Number of species", y = "")  + theme(legend.position = "") + ggtitle("Number of chromosome level assemblies per family") + facet_grid2(clade ~ ., scales = "free", space = "free", strip= strip) + theme(strip.text.y = element_text(angle = 0)) + scale_x_sqrt(breaks = c(1,50,250,500,1000))
+
+p4 = reshape2::melt(df3) %>% ggplot(aes(value, families, fill = variable)) + geom_col(position = "fill") + scale_fill_manual(values = c("grey", "purple")) + theme(legend.position = "") + labs(x = "Percentage", y = "") + facet_grid2(clade ~ ., scales = "free", space = "free", strip= strip) + theme(strip.text.y = element_blank()) + scale_x_continuous(labels = scales::percent_format())
+
+p5 = p3 + p4 + plot_layout(guides = "collect", axes = "collect_y") 
+
+pdf("../SquamateGenomics/Nb_chr_assm.perfam.pdf", width = 6, height = 9)
+p3
+dev.off()
+
+```
